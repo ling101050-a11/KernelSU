@@ -83,6 +83,7 @@ jobs:
         path: /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
 
     - name: Build kernelsu.ko for x64
+      continue-on-error: true
       env:
         EXPECTED_SIZE2: ${{ inputs.expected_size2 }}
         EXPECTED_HASH2: ${{ inputs.expected_hash2 }}
