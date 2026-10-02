@@ -110,7 +110,7 @@ pub fn run(_package_name: &String, kmi: Option<String>, allow_shell: bool) -> Re
        //     warn!("disable all modules failed: {e}");
        // }
        // return Ok(());
-    }
+    //}
     // 5. Handle module updates
     // [nomodules v3] NEVER handle/mount/execute modules.
     // v3 fix: restorecon + SELinux rules (step 6) + feature init (step 7)
