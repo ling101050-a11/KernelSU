@@ -104,20 +104,20 @@ pub fn run(_package_name: &String, kmi: Option<String>, allow_shell: bool) -> Re
     utils::finish_install(None).context("Failed to finish ksud installation")?;
     // [nomodules] root is ready above; NEVER handle/mount/execute modules.
     // Blocks metamodule::exec_mount_script() and all stage scripts.
-    if utils::is_safe_mode() {
-        info!("safe mode, skip late-load module handling, disable all modules");
-        if let Err(e) = crate::module::disable_all_modules() {
-            warn!("disable all modules failed: {e}");
-        }
-        return Ok(());
+    //if utils::is_safe_mode() {
+      //  info!("safe mode, skip late-load module handling, disable all modules");
+       // if let Err(e) = crate::module::disable_all_modules() {
+       //     warn!("disable all modules failed: {e}");
+       // }
+       // return Ok(());
     }
     // 5. Handle module updates
-    if let Err(e) = handle_updated_modules() {
-        warn!("handle updated modules failed: {e}");
-    }
-
-    if let Err(e) = prune_modules() {
-        warn!("prune modules failed: {e}");
+    // [nomodules v3] NEVER handle/mount/execute modules.
+    // v3 fix: restorecon + SELinux rules (step 6) + feature init (step 7)
+    // are REQUIRED. Without step 6 the daemon never gets the u:r:ksu:s0
+    // domain and su is blocked by enforcing SELinux (root denied).
+    if let Err(e) = crate::module::disable_all_modules() {
+        warn!("disable all modules failed: {e}");
     }
 
     if let Err(e) = restorecon::restorecon() {
@@ -138,27 +138,7 @@ pub fn run(_package_name: &String, kmi: Option<String>, allow_shell: bool) -> Re
         warn!("init features failed: {e}");
     }
 
-    // 8. Execute late-load stage scripts (blocking)
-    init_event::run_stage("late-load", true);
-
-    // 9. Load system.prop
-    if let Err(e) = crate::module::load_system_prop() {
-        warn!("load system.prop failed: {e}");
-    }
-
-    // 10. Execute metamodule mount script (OverlayFS)
-    if let Err(e) = metamodule::exec_mount_script(defs::MODULE_DIR) {
-        warn!("execute metamodule mount failed: {e}");
-    }
-
-    // 11. Execute post-mount stage scripts (blocking)
-    init_event::run_stage("post-mount", true);
-
-    // 12. Execute service stage scripts (non-blocking)
-    init_event::run_stage("service", false);
-
-    // 13. Execute boot-completed stage scripts (non-blocking)
-    init_event::run_stage("boot-completed", false);
-
+    // [nomodules v3] steps 8-13 (late-load/service/boot-completed scripts,
+    // system.prop, metamodule mount) are intentionally skipped.
     Ok(())
 }
