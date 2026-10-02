@@ -102,7 +102,15 @@ pub fn run(_package_name: &String, kmi: Option<String>, allow_shell: bool) -> Re
     // changed this process's security context, writing the daemon path fails
     // under Samsung KDP/SELinux and leaves a zero-byte file.
     utils::finish_install(None).context("Failed to finish ksud installation")?;
-
+    // [nomodules] root is ready above; NEVER handle/mount/execute modules.
+    // Blocks metamodule::exec_mount_script() and all stage scripts.
+    if utils::is_safe_mode() {
+        info!("safe mode, skip late-load module handling, disable all modules");
+        if let Err(e) = crate::module::disable_all_modules() {
+            warn!("disable all modules failed: {e}");
+        }
+        return Ok(());
+    }
     // 5. Handle module updates
     if let Err(e) = handle_updated_modules() {
         warn!("handle updated modules failed: {e}");
