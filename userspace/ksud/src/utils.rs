@@ -151,6 +151,9 @@ pub fn getprop(name: &str) -> Option<String> {
 }
 
 pub fn is_safe_mode() -> bool {
+    // [nomodules] forced safe mode: never load/execute any module
+    return true;
+    #[allow(unreachable_code)]
     let safemode = getprop("persist.sys.safemode")
         .as_ref()
         .is_some_and(|prop| prop == "1")
