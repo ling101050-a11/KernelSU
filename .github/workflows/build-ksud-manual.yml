@@ -1,0 +1,84 @@
+name: Build ksud (nomodules manual v4)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Step 1: build kernelsu.ko for S23U (android13-5.15) in the DDK container.
+  # Without this, ksud compiles fine but has NO embedded kernelsu.ko asset,
+  # and late-load dies at "asset not found" BEFORE finit_module
+  # => GhostSam shows "stuck before finit (copy/fork/exec side failed)".
+  build-lkm:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android13-5.15-20260828
+      options: --privileged
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v6
+
+      - name: Build kernelsu.ko (android13-5.15)
+        run: |
+          git config --global --add safe.directory '*'
+          cd kernel
+          CONFIG_KSU=m CC=clang make
+          OUT_DIR=/github/workspace/out/aarch64
+          mkdir -p "$OUT_DIR"
+          cp kernelsu.ko "$OUT_DIR/android13-5.15_kernelsu.ko"
+          llvm-strip -d "$OUT_DIR/android13-5.15_kernelsu.ko"
+          ls -la "$OUT_DIR"
+
+      - name: Upload kernelsu.ko artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: aarch64-android13-5.15-lkm
+          path: /github/workspace/out/aarch64/android13-5.15_kernelsu.ko
+
+  # Step 2: build ksud WITH the kernelsu.ko embedded (bin/aarch64 RustEmbed).
+  build-ksud:
+    needs: build-lkm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download LKM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: aarch64-android13-5.15-lkm
+          path: lkm
+
+      - name: Prepare LKM files (embed into ksud)
+        run: |
+          mkdir -p userspace/ksud/bin/aarch64
+          cp lkm/android13-5.15_kernelsu.ko userspace/ksud/bin/aarch64/
+          ls -la userspace/ksud/bin/aarch64/
+
+      - name: Setup rustup
+        run: |
+          rustup update stable
+          rustup target add aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: userspace/ksud
+          cache-targets: false
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: Build ksud
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo build --target aarch64-linux-android --release --manifest-path ./userspace/ksud/Cargo.toml
+
+      - name: Upload ksud
+        uses: actions/upload-artifact@v7
+        with:
+          name: ksud-nomodules-arm64
+          path: target/aarch64-linux-android/release/ksud
